@@ -1,3 +1,5 @@
+![Iowa Liquor Sales Lakehouse — Medallion Architecture](docs/diagrams/lakehouse-overview.png)
+
 # Iowa Liquor Sales Lakehouse
 
 **PySpark · Spark SQL · Delta Lake · Databricks · Unity Catalog · Medallion Architecture**
