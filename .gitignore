@@ -27,3 +27,17 @@ Tablet/
 Boceto*/
 Día*/
 Plan*
+
+# Local execution and packaging
+.venv/
+.state/
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+*.egg-info/
+spark-warehouse/
+derby.log
+metastore_db/
+artifacts/
+*.pyc

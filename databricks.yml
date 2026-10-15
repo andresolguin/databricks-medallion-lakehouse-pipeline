@@ -1,0 +1,37 @@
+bundle:
+  name: iowa-lakehouse
+
+include:
+  - resources/*.yml
+
+variables:
+  catalog:
+    description: Existing Unity Catalog catalog
+    default: workspace
+  bronze_schema:
+    default: iowa_bronze
+  silver_schema:
+    default: iowa_silver
+  gold_schema:
+    default: iowa_gold
+  volume:
+    default: iowa_files
+
+artifacts:
+  project:
+    type: whl
+    path: .
+    build: python -m build --wheel
+
+targets:
+  dev:
+    default: true
+    mode: development
+
+sync:
+  exclude:
+    - .state/**
+    - .venv/**
+    - .pytest_cache/**
+    - .ruff_cache/**
+    - tests/**

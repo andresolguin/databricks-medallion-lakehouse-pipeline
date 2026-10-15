@@ -1,58 +1,52 @@
-# Idempotency (Gold Publish)
+# Idempotency and reconciliation
 
-## Context
-During testing, re-running the Gold publish can insert rows that were already present, producing duplicates in `gold.fact_sales`.
-This affects `COUNT(*)`, while `COUNT(DISTINCT invoice_line_no)` (business metric) stays stable.
+## File ingestion
 
-## Metrics
-```sql
-SELECT
-  COUNT(*) AS total_rows,
-  COUNT(DISTINCT invoice_line_no) AS distinct_invoice_lines
-FROM gold.fact_sales;
-```
+Country + delivery date + content SHA-256 define a source file identity. Canonical raw strings define
+the raw record hash; combining both yields a deterministic Bronze row ID. Raw MERGE only inserts
+unseen IDs. Identical physical rows retain an occurrence count. A source-path/content receipt is
+registered after the raw write, so a retry after an interrupted registration remains safe.
 
-## Duplicate check
-```sql
-SELECT
-  invoice_line_no,
-  COUNT(*) AS occurrences
-FROM gold.fact_sales
-GROUP BY invoice_line_no
-HAVING COUNT(*) > 1
-ORDER BY occurrences DESC;
-```
+The same contents in a later delivery are a new observation: they may represent an intentional
+reversal of an earlier correction. Renaming or replaying the same contents within one delivery
+does not create extra current sales.
 
-## Recommended fix (production-grade)
-Make the publish idempotent using an UPSERT (MERGE) on a business key.  
-Preferred key: `invoice_line_no` (or `invoice_id + line_no` if modeled separately).
+## Current sale selection
 
-```sql
-MERGE INTO gold.fact_sales AS t
-USING gold.fact_sales_staging AS s
-ON t.invoice_line_no = s.invoice_line_no
-WHEN MATCHED THEN UPDATE SET *
-WHEN NOT MATCHED THEN INSERT *;
-```
+The complete invoice-line key is preserved. Latest delivery date determines precedence. A late
+backfill cannot override a newer delivery. Equivalent observations deduplicate deterministically;
+different canonical latest-day payloads are quarantined instead of choosing an arbitrary winner.
 
-Note: `gold.fact_sales_staging` is the freshly transformed dataset for the current run.
+## Gold
 
-## Alternative (analytics-only workaround)
-If you cannot modify the publish job, create a deduplicated view for analytics:
+The source of fact MERGE contains exactly one valid row per `(country, invoice_line_no)`.
+Matching rows update only when projected values or lineage change; new keys insert. The source is
+the full current Silver snapshot, so target rows absent from it can be deleted safely. An incoming
+file alone must never be used with `WHEN NOT MATCHED BY SOURCE DELETE`.
+
+Replay assertions cover fact count, sales totals and source equality. Distinct invoice counts alone
+are insufficient: duplicates can also inflate revenue, volume and margin.
+
+## Example checks in a configured Gold SQL context
 
 ```sql
-CREATE OR REPLACE VIEW gold.fact_sales_dedup AS
-SELECT * EXCEPT (rn)
-FROM (
-  SELECT
-    f.*,
-    ROW_NUMBER() OVER (
-      PARTITION BY invoice_line_no
-      ORDER BY year DESC, month DESC
-    ) AS rn
-  FROM gold.fact_sales f
-)
-WHERE rn = 1;
+SELECT country, invoice_line_no, COUNT(*) AS occurrences
+FROM fact_sales
+GROUP BY country, invoice_line_no
+HAVING COUNT(*) <> 1;
+
+SELECT COUNT(*) AS inconsistent_partitions
+FROM fact_sales
+WHERE year <> YEAR(sale_date)
+   OR month <> MONTH(sale_date)
+   OR date_key <> CAST(date_format(sale_date, 'yyyyMMdd') AS INT);
+
+SELECT COUNT(*) AS unmapped_items
+FROM fact_sales f
+LEFT ANTI JOIN dim_item i
+ON f.country = i.country AND f.item_no = i.item_no;
 ```
 
-This keeps reporting stable, but the proper fix is the MERGE-based idempotent publish.
+The executable pipeline raises on failed invariants before archival. The integration tests exercise
+real Delta MERGE, subsequent corrections, invalid latest corrections, late backfills, partial archive
+failure and recovery between raw and manifest commits.

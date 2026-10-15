@@ -1,0 +1,33 @@
+name: Pipeline checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      SPARK_LOCAL_IP: 127.0.0.1
+      SPARK_MASTER: local[2]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - run: python -m pip install -e '.[local,dev]'
+      - run: ruff check src tests scripts examples
+      - run: python scripts/check_notebooks.py
+      - run: pytest -q --junitxml=.state/test-results.xml
+      - run: python -m build --wheel
