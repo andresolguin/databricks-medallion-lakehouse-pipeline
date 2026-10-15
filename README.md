@@ -1,4 +1,4 @@
-![Iowa Liquor Sales Lakehouse — Medallion Architecture](docs/diagrams/lakehouse-overview.png)
+![Iowa Liquor Sales Lakehouse](docs/diagrams/Arquitectura%20medall%C3%B3n%20para%20Iowa%20Liquor%20Sales.png)
 
 # Iowa Liquor Sales Lakehouse
 
