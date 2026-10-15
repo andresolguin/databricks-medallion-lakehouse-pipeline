@@ -11,8 +11,6 @@ conflicting records, quarantine, and verified source archival.
 One Python implementation runs against **local Delta tables** or **Unity Catalog**. Notebooks provide
 interactive entry points; a versioned Databricks job defines the execution order.
 
-![Pipeline architecture](docs/diagrams/Diagrama01.png)
-
 ## What the pipeline demonstrates
 
 - **Bronze:** immutable staging, SHA-256 file identity, insert-only raw merges and a persistent file manifest.
